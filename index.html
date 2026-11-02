@@ -126,7 +126,7 @@ label.file input{display:none}
   <h3 id="edTitle">Post</h3>
   <div id="edLock" class="lock" hidden></div>
   <textarea id="edText" placeholder="What's happening?"></textarea>
-  <div class="row"><span class="muted">Media: up to 4 images, or 1 video</span><span class="count" id="edCount">0</span></div>
+  <div class="row"><span class="muted">Media: up to 4 images, or 1 video · Ctrl+V pastes an image</span><span class="count" id="edCount">0</span></div>
   <div id="mediaList"></div>
   <div class="row">
     <label class="file"><button type="button" id="addMediaBtn">+ Image / video</button><input type="file" id="edFile" accept="image/png,image/jpeg,image/gif,image/webp,video/mp4,video/quicktime" multiple></label>
@@ -375,8 +375,16 @@ async function renderMedia(){
 }
 $("mediaList").onclick = e => { const b = e.target.closest("button[data-i]"); if(!b) return; edPost.media.splice(+b.dataset.i,1); renderMedia(); };
 $("addMediaBtn").onclick = () => $("edFile").click();
-$("edFile").onchange = async e => {
-  const files = [...e.target.files]; e.target.value = "";
+$("edFile").onchange = e => { const files = [...e.target.files]; e.target.value = ""; addFiles(files); };
+// Ctrl+V in the text box: an image or video on the clipboard becomes media, plain text pastes as usual
+$("edText").addEventListener("paste", e => {
+  if($("edText").readOnly) return;
+  const files = [...(e.clipboardData?.files||[])].filter(f=>/^(image|video)\//.test(f.type));
+  if(!files.length) return;
+  e.preventDefault();
+  addFiles(files.map(f => f.name && f.name!=="image.png" ? f : new File([f], `pasted-${Date.now().toString(36)}.${(f.type.split("/")[1]||"png").replace("jpeg","jpg").replace("quicktime","mov")}`, {type:f.type})));
+});
+async function addFiles(files){
   for(const f of files){
     const isVid = f.type.startsWith("video/");
     const hasVid = edPost.media.some(m=>m.type==="video");
@@ -388,7 +396,7 @@ $("edFile").onchange = async e => {
     try{ edPost.media.push(await uploadMedia(f, edPost.id)); }catch(err){ alert("Upload failed: "+err.message); }
     renderMedia();
   }
-};
+}
 $("edCancel").onclick = () => $("editor").close();
 $("edDelete").onclick = () => {
   if(edIsNew){ $("editor").close(); return; }

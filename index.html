@@ -1,0 +1,407 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>X Planner</title>
+<style>
+:root{--bg:#0b0d12;--panel:#12151c;--card:#1a1e27;--line:#262b36;--txt:#e8eaf0;--mut:#8a92a3;--faint:#4b5262;
+--blue:#1d9bf0;--green:#00ba7c;--amber:#f5a524;--red:#f4212e;--quote:#d9b36c;--question:#22d3ee;--post:#1d9bf0}
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--bg);color:var(--txt);font:14px/1.4 -apple-system,BlinkMacSystemFont,"Segoe UI",Inter,Arial,sans-serif}
+button,input,select,textarea{font:inherit;color:inherit}
+button{background:var(--card);border:1px solid var(--line);border-radius:8px;padding:7px 12px;cursor:pointer}
+button:hover{border-color:var(--faint)}
+button.primary{background:var(--blue);border-color:var(--blue);color:#fff;font-weight:600}
+button.danger{color:var(--red)}
+header{position:sticky;top:0;z-index:20;display:flex;align-items:center;gap:12px;padding:10px 16px;background:rgba(11,13,18,.95);border-bottom:1px solid var(--line);flex-wrap:wrap}
+header h1{font-size:17px;margin:0;font-weight:800}
+#status{color:var(--mut);font-size:13px;margin-right:auto}
+#status.err{color:var(--red)} #status.ok{color:var(--green)}
+.stat{color:var(--mut);font-size:13px}
+.stat b{color:var(--txt)}
+#banner{display:none;padding:9px 16px;background:#2a2110;color:#f5c26b;border-bottom:1px solid #4a3a16;font-size:13px}
+main{display:flex;align-items:flex-start}
+#tray{position:sticky;top:53px;width:270px;flex:none;height:calc(100vh - 53px);overflow:auto;border-right:1px solid var(--line);padding:12px;background:var(--panel)}
+#tray h2{font-size:13px;color:var(--mut);margin:4px 0 10px;text-transform:uppercase;letter-spacing:.6px;display:flex;justify-content:space-between;align-items:center}
+#drafts{min-height:120px;display:flex;flex-direction:column;gap:8px;border-radius:10px;padding:2px}
+#drafts.over{outline:2px dashed var(--blue)}
+.hint{color:var(--faint);font-size:12px;margin-top:10px}
+#gridwrap{flex:1;overflow:auto;height:calc(100vh - 53px)}
+table{border-collapse:separate;border-spacing:0;min-width:100%}
+th{position:sticky;top:0;z-index:5;background:var(--panel);color:var(--mut);font-weight:600;font-size:12px;padding:8px;border-bottom:1px solid var(--line);text-align:left}
+th.day,td.day{position:sticky;left:0;z-index:6;background:var(--panel);width:92px;min-width:92px}
+th.day{z-index:7}
+td{border-bottom:1px solid var(--line);border-right:1px solid #171a22;vertical-align:top;padding:5px;width:200px;min-width:170px;height:96px}
+td.day{padding:8px;color:var(--mut);font-size:12px;border-right:1px solid var(--line)}
+td.day b{display:block;color:var(--txt);font-size:14px}
+td.day .fill{margin-top:4px;font-size:11px}
+tr.today td.day{box-shadow:inset 3px 0 0 var(--blue)}
+tr.weekend td.day b{color:#b9c0cf}
+td.slot.past{background:#0d0f14}
+td.slot.over{outline:2px dashed var(--blue);outline-offset:-3px}
+.empty{height:100%;min-height:84px;border:1px dashed transparent;border-radius:8px;display:flex;align-items:center;justify-content:center;color:var(--faint);cursor:pointer;font-size:18px}
+td.slot:hover .empty{border-color:var(--line);color:var(--mut)}
+td.slot.past .empty{cursor:default;font-size:11px}
+.card{position:relative;background:var(--card);border:1px solid var(--line);border-left:3px solid var(--post);border-radius:8px;padding:6px 8px 6px 9px;cursor:grab;min-height:84px;display:flex;flex-direction:column;gap:4px}
+.card.quote{border-left-color:var(--quote)} .card.question{border-left-color:var(--question)}
+.card .t{font-size:12.5px;line-height:1.35;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden;white-space:pre-line;word-break:break-word}
+.card .m{display:flex;gap:6px;align-items:center;margin-top:auto;font-size:11px;color:var(--mut)}
+.card .m .k{text-transform:uppercase;letter-spacing:.5px;font-weight:700}
+.card.quote .k{color:var(--quote)} .card.question .k{color:var(--question)} .card.post .k{color:var(--post)}
+.card .thumb{width:100%;height:54px;object-fit:cover;border-radius:5px;background:#000}
+.card.posted{opacity:.6;cursor:default;border-left-color:var(--green)}
+.card.posted .k{color:var(--green)!important}
+.card.missed{border-color:#5a3d10}
+.card.dragging{opacity:.35}
+.card .badge{margin-left:auto}
+.badge.ok{color:var(--green)} .badge.warn{color:var(--amber)}
+dialog{background:var(--panel);color:var(--txt);border:1px solid var(--line);border-radius:14px;padding:0;width:min(620px,94vw)}
+dialog::backdrop{background:rgba(0,0,0,.6)}
+.dlg{padding:16px;display:flex;flex-direction:column;gap:12px}
+.dlg h3{margin:0;font-size:16px}
+.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+textarea{width:100%;min-height:170px;resize:vertical;background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:10px;line-height:1.45}
+select,input[type=date],input[type=text],input[type=password]{background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:7px 9px}
+.count{color:var(--mut);font-size:12px;margin-left:auto}
+.count.long{color:var(--amber)}
+#mediaList{display:flex;gap:8px;flex-wrap:wrap}
+.mi{position:relative;width:120px;height:90px;border-radius:8px;overflow:hidden;background:#000;border:1px solid var(--line)}
+.mi img,.mi video{width:100%;height:100%;object-fit:cover}
+.mi button{position:absolute;top:4px;right:4px;padding:1px 7px;font-size:12px;background:rgba(0,0,0,.7)}
+.mi .up{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:12px;color:var(--mut);background:rgba(0,0,0,.6)}
+label.file{display:inline-block}
+label.file input{display:none}
+.lock{color:var(--green);font-size:13px}
+.lock a{color:var(--blue)}
+.muted{color:var(--mut);font-size:12px}
+@media (max-width:760px){
+  main{flex-direction:column}
+  #tray{position:static;width:100%;height:auto;border-right:0;border-bottom:1px solid var(--line)}
+  #drafts{flex-direction:row;overflow-x:auto;min-height:0}
+  #drafts .card{min-width:200px}
+  .hint{display:none}
+  #gridwrap{height:auto;width:100%}
+  td{min-width:150px}
+}
+</style>
+</head>
+<body>
+<header>
+  <h1>X Planner</h1>
+  <span id="status">loading…</span>
+  <span class="stat" id="stats"></span>
+  <button id="newBtn">+ New draft</button>
+  <button id="setBtn">Settings</button>
+</header>
+<div id="banner"></div>
+<main>
+  <aside id="tray">
+    <h2>Drafts <span id="draftCount"></span></h2>
+    <div id="drafts"></div>
+    <div class="hint">Drag a card into a slot to schedule it. Drag it back here to unschedule. Dropping on a filled slot swaps the two posts.</div>
+  </aside>
+  <div id="gridwrap"><table id="grid"></table></div>
+</main>
+
+<dialog id="editor"><form method="dialog" class="dlg" id="edForm">
+  <h3 id="edTitle">Post</h3>
+  <div id="edLock" class="lock" hidden></div>
+  <textarea id="edText" placeholder="What's happening?"></textarea>
+  <div class="row"><span class="muted">Media: up to 4 images, or 1 video</span><span class="count" id="edCount">0</span></div>
+  <div id="mediaList"></div>
+  <div class="row">
+    <label class="file"><button type="button" id="addMediaBtn">+ Image / video</button><input type="file" id="edFile" accept="image/png,image/jpeg,image/gif,image/webp,video/mp4,video/quicktime" multiple></label>
+    <select id="edKind"><option value="post">Post</option><option value="quote">Quote</option><option value="question">Question</option></select>
+  </div>
+  <div class="row">
+    <input type="date" id="edDate"><select id="edSlot"></select>
+    <span class="muted" id="edWhen"></span>
+  </div>
+  <div class="row">
+    <button type="button" class="danger" id="edDelete">Delete</button>
+    <span style="margin-left:auto"></span>
+    <button type="button" id="edCancel">Cancel</button>
+    <button type="button" class="primary" id="edDone">Done</button>
+  </div>
+</form></dialog>
+
+<dialog id="settings"><form method="dialog" class="dlg">
+  <h3>Settings</h3>
+  <div class="muted">The planner reads and writes <code>planner/posts.json</code> in your scheduler repo through the GitHub API. The token stays in this browser only.</div>
+  <label class="muted">Repository<br><input type="text" id="sRepo" style="width:100%"></label>
+  <label class="muted">Fine-grained token (only this repo, Contents: read and write)<br><input type="password" id="sToken" style="width:100%" autocomplete="off"></label>
+  <div class="row"><button type="button" class="danger" id="sForget">Forget token</button><span style="margin-left:auto"></span><button type="button" id="sCancel">Cancel</button><button type="button" class="primary" id="sSave">Save &amp; connect</button></div>
+</form></dialog>
+
+<script>
+"use strict";
+const DAYS = 62, BRANCH = "master";
+const LS = {get:k=>{try{return localStorage.getItem(k)}catch(e){return null}}, set:(k,v)=>{try{localStorage.setItem(k,v)}catch(e){}}, del:k=>{try{localStorage.removeItem(k)}catch(e){}}};
+let repo = LS.get("xp.repo") || "andzol/x-wisdom-scheduler";
+let token = LS.get("xp.token") || "";
+const demo = !token;
+
+let cfg = {timezone:"Europe/Budapest", slots:["06:00","08:00","10:00","12:00","14:00","16:00"]};
+let posts = [], posted = new Map(), sha = null, dirty = false, saving = false, saveTimer = null;
+const mediaCache = new Map();   // repo path -> object URL
+const pendingMedia = new Map(); // repo path -> {file, url} not yet uploaded (demo mode keeps them here)
+
+const $ = id => document.getElementById(id);
+const esc = s => String(s).replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+function setStatus(msg, cls=""){ const s=$("status"); s.textContent=msg; s.className=cls; }
+
+/* ---------- time in the planner's timezone ---------- */
+function nowParts(){
+  const p = Object.fromEntries(new Intl.DateTimeFormat("en-CA",{timeZone:cfg.timezone,year:"numeric",month:"2-digit",day:"2-digit",hour:"2-digit",minute:"2-digit",hour12:false}).formatToParts(new Date()).map(x=>[x.type,x.value]));
+  return {date:`${p.year}-${p.month}-${p.day}`, time:`${p.hour==="24"?"00":p.hour}:${p.minute}`};
+}
+const isPast = (date, slot) => { const n = nowParts(); return date < n.date || (date === n.date && slot <= n.time); };
+function addDays(iso, n){ const d = new Date(iso+"T12:00:00Z"); d.setUTCDate(d.getUTCDate()+n); return d.toISOString().slice(0,10); }
+function dayLabel(iso){ const d = new Date(iso+"T12:00:00Z"); return {wd:d.toLocaleDateString("en-US",{weekday:"short",timeZone:"UTC"}), md:d.toLocaleDateString("en-US",{month:"short",day:"numeric",timeZone:"UTC"}), dow:d.getUTCDay()}; }
+
+/* ---------- GitHub API ---------- */
+async function gh(path, opts={}){
+  const r = await fetch(`https://api.github.com/repos/${repo}/${path}`, {...opts, headers:{Authorization:`Bearer ${token}`, Accept:"application/vnd.github+json", "X-GitHub-Api-Version":"2022-11-28", ...(opts.headers||{})}});
+  if(!r.ok){ const t = await r.text(); const e = new Error(`GitHub ${r.status}: ${t.slice(0,200)}`); e.status = r.status; throw e; }
+  return r;
+}
+const b64utf8 = s => { const b = new TextEncoder().encode(s); let bin=""; for(let i=0;i<b.length;i+=0x8000) bin += String.fromCharCode.apply(null, b.subarray(i,i+0x8000)); return btoa(bin); };
+const utf8b64 = s => new TextDecoder().decode(Uint8Array.from(atob(s.replace(/\n/g,"")), c=>c.charCodeAt(0)));
+async function getText(path){ const r = await gh(`contents/${path}?ref=${BRANCH}`, {headers:{Accept:"application/vnd.github.raw"}}); return r.text(); }
+async function getJSONWithSha(path){ const r = await gh(`contents/${path}?ref=${BRANCH}`); const j = await r.json(); return {data: JSON.parse(j.content ? utf8b64(j.content) : await getText(path)), sha:j.sha}; }
+function fileB64(file){ return new Promise((res,rej)=>{ const fr=new FileReader(); fr.onload=()=>res(fr.result.split(",")[1]); fr.onerror=rej; fr.readAsDataURL(file); }); }
+
+async function load(){
+  if(demo){
+    $("banner").style.display="block";
+    $("banner").textContent = "Demo mode: nothing is saved to GitHub. Open Settings and add a token to plan for real.";
+    const saved = LS.get("xp.demo");
+    posts = saved ? JSON.parse(saved) : demoPosts();
+    render(); setStatus("demo"); return;
+  }
+  setStatus("loading…");
+  try{
+    try{ cfg = JSON.parse(await getText("planner/config.json")); }catch(e){ if(e.status!==404) throw e; }
+    const p = await getJSONWithSha("planner/posts.json"); posts = p.data.posts; sha = p.sha;
+    await loadPosted();
+    render(); setStatus("synced", "ok");
+  }catch(e){ setStatus(e.message, "err"); console.error(e); }
+}
+async function loadPosted(){
+  try{
+    const log = await getText("posted.log");
+    posted = new Map([...log.matchAll(/^(\S+)\t(\d+)\t/gm)].map(m=>[m[1], m[2]]));
+  }catch(e){ if(e.status!==404) throw e; }
+}
+function markDirty(){
+  dirty = true; render();
+  if(demo){ LS.set("xp.demo", JSON.stringify(posts)); return; }
+  setStatus("unsaved changes…");
+  clearTimeout(saveTimer); saveTimer = setTimeout(save, 1200);
+}
+async function save(){
+  if(demo || !dirty) return;
+  if(saving){ clearTimeout(saveTimer); saveTimer = setTimeout(save, 800); return; }
+  saving = true; setStatus("saving…");
+  try{
+    const body = {message:"planner: update posts", branch:BRANCH, content:b64utf8(JSON.stringify({posts}, null, 1)+"\n"), sha};
+    const r = await gh("contents/planner/posts.json", {method:"PUT", body:JSON.stringify(body)});
+    sha = (await r.json()).content.sha; dirty = false; setStatus("saved", "ok");
+  }catch(e){
+    if(e.status===409 || e.status===422){ setStatus("changed elsewhere, reloading…", "err"); alert("posts.json was changed from another device. Reloading the latest version; redo your last change."); dirty=false; await load(); }
+    else setStatus("save failed: "+e.message, "err");
+  }finally{ saving = false; }
+}
+window.addEventListener("beforeunload", e => { if(dirty && !demo){ e.preventDefault(); e.returnValue=""; } });
+
+async function mediaURL(path){
+  if(pendingMedia.has(path)) return pendingMedia.get(path).url;
+  if(mediaCache.has(path)) return mediaCache.get(path);
+  if(demo) return "";
+  const r = await gh(`contents/planner/${path}?ref=${BRANCH}`, {headers:{Accept:"application/vnd.github.raw"}});
+  const url = URL.createObjectURL(await r.blob()); mediaCache.set(path, url); return url;
+}
+async function uploadMedia(file, postId){
+  const ext = (file.name.split(".").pop()||"bin").toLowerCase();
+  const path = `media/${postId}-${Date.now().toString(36)}.${ext}`;
+  const url = URL.createObjectURL(file);
+  pendingMedia.set(path, {file, url});
+  if(!demo){
+    await gh(`contents/planner/${path}`, {method:"PUT", body:JSON.stringify({message:`planner: add ${path}`, branch:BRANCH, content: await fileB64(file)})});
+    pendingMedia.delete(path); mediaCache.set(path, url);
+  }
+  return {path, type:file.type.startsWith("video/")?"video":"image"};
+}
+
+/* ---------- rendering ---------- */
+const slotKey = (d,s) => `${d}|${s}`;
+function render(){
+  const n = nowParts();
+  const start = n.date, bySlot = new Map(), drafts = [];
+  for(const p of posts){ if(p.date && p.slot) bySlot.set(slotKey(p.date,p.slot), p); else drafts.push(p); }
+  let html = `<tr><th class="day">Day</th>${cfg.slots.map(s=>`<th>${s} <span style="color:var(--faint)">${tzShort()}</span></th>`).join("")}</tr>`;
+  let empty = 0, filled = 0;
+  for(let i=0;i<DAYS;i++){
+    const d = addDays(start, i), L = dayLabel(d);
+    const cnt = cfg.slots.filter(s=>bySlot.has(slotKey(d,s))).length;
+    let cells = "";
+    for(const s of cfg.slots){
+      const p = bySlot.get(slotKey(d,s)), past = isPast(d,s);
+      if(!p && !past) empty++; if(p) filled++;
+      cells += `<td class="slot${past?" past":""}" data-date="${d}" data-slot="${s}">${p?cardHTML(p):`<div class="empty">${past?"":"+"}</div>`}</td>`;
+    }
+    html += `<tr class="${i===0?"today":""}${L.dow===0||L.dow===6?" weekend":""}"><td class="day"><b>${L.wd} ${L.md}</b><div class="fill" style="color:${cnt===cfg.slots.length?"var(--green)":cnt?"var(--mut)":"var(--faint)"}">${cnt}/${cfg.slots.length}</div></td>${cells}</tr>`;
+  }
+  // scheduled posts further out than the grid shows still count
+  $("grid").innerHTML = html;
+  $("drafts").innerHTML = drafts.map(cardHTML).join("") || `<div class="hint">No unscheduled drafts</div>`;
+  $("draftCount").textContent = drafts.length || "";
+  $("stats").innerHTML = `<b>${filled}</b> planned · <b>${empty}</b> empty slots in ${DAYS} days`;
+  hydrateThumbs();
+}
+function tzShort(){ try{ return new Intl.DateTimeFormat("en-GB",{timeZone:cfg.timezone,timeZoneName:"short"}).formatToParts(new Date()).find(x=>x.type==="timeZoneName").value; }catch(e){ return ""; } }
+function cardHTML(p){
+  const tid = posted.get(p.id), past = p.date && p.slot && isPast(p.date,p.slot);
+  const kind = p.kind || "post";
+  const img = (p.media||[]).find(m=>m.type==="image"), vid = (p.media||[]).find(m=>m.type==="video");
+  const cls = ["card", kind, tid?"posted":"", !tid&&past?"missed":""].join(" ");
+  const badge = tid ? `<span class="badge ok">✓ posted</span>` : past ? `<span class="badge warn">posting…</span>` : "";
+  return `<div class="${cls}" draggable="${tid?"false":"true"}" data-id="${esc(p.id)}">
+    ${img?`<img class="thumb" data-path="${esc(img.path)}" alt="">`:""}
+    <div class="t">${esc((p.text||"(no text)").replace(/\n{2,}/g,"\n"))}</div>
+    <div class="m"><span class="k">${tid?"posted":kind}</span>${vid?"<span>🎬 video</span>":""}${(p.media||[]).filter(m=>m.type==="image").length>1?`<span>🖼 ${(p.media||[]).length}</span>`:""}${badge}</div></div>`;
+}
+let thumbObserver = null;
+function hydrateThumbs(){
+  if(thumbObserver) thumbObserver.disconnect();
+  thumbObserver = new IntersectionObserver(entries => {
+    for(const e of entries) if(e.isIntersecting){ thumbObserver.unobserve(e.target); mediaURL(e.target.dataset.path).then(u=>{ if(u) e.target.src=u; }).catch(()=>{}); }
+  }, {root:null, rootMargin:"300px"});
+  document.querySelectorAll("img.thumb").forEach(i=>thumbObserver.observe(i));
+}
+
+/* ---------- drag & drop ---------- */
+let dragId = null;
+document.addEventListener("dragstart", e => { const c = e.target.closest?.(".card"); if(!c || c.getAttribute("draggable")!=="true") return; dragId = c.dataset.id; c.classList.add("dragging"); e.dataTransfer.effectAllowed="move"; e.dataTransfer.setData("text/plain", dragId); });
+document.addEventListener("dragend", e => { e.target.closest?.(".card")?.classList.remove("dragging"); document.querySelectorAll(".over").forEach(x=>x.classList.remove("over")); dragId=null; });
+document.addEventListener("dragover", e => {
+  const t = dropTarget(e.target); if(!t || !dragId) return;
+  e.preventDefault(); document.querySelectorAll(".over").forEach(x=>{ if(x!==t) x.classList.remove("over"); }); t.classList.add("over");
+});
+document.addEventListener("drop", e => {
+  const t = dropTarget(e.target); if(!t || !dragId) return; e.preventDefault(); t.classList.remove("over");
+  const p = posts.find(x=>x.id===dragId); if(!p) return;
+  if(t.id==="drafts"){ p.date=null; p.slot=null; markDirty(); return; }
+  const d = t.dataset.date, s = t.dataset.slot;
+  const other = posts.find(x=>x.date===d && x.slot===s && x.id!==p.id);
+  if(other){ if(posted.has(other.id)) return; other.date = p.date; other.slot = p.slot; }
+  p.date = d; p.slot = s; markDirty();
+});
+function dropTarget(el){
+  const td = el.closest?.("td.slot"); if(td && !td.classList.contains("past")) return td;
+  return el.closest?.("#drafts") || null;
+}
+
+/* ---------- editor ---------- */
+let edPost = null, edIsNew = false;
+document.addEventListener("click", e => {
+  const c = e.target.closest(".card"); if(c){ openEditor(posts.find(p=>p.id===c.dataset.id)); return; }
+  const em = e.target.closest("td.slot:not(.past) .empty"); if(em){ const td = em.closest("td"); openEditor(null, td.dataset.date, td.dataset.slot); }
+});
+$("newBtn").onclick = () => openEditor(null, null, null);
+function newId(){ return "p" + Date.now().toString(36) + Math.random().toString(36).slice(2,6); }
+function openEditor(p, date, slot){
+  edIsNew = !p;
+  edPost = p ? JSON.parse(JSON.stringify(p)) : {id:newId(), date, slot, kind:"post", text:"", media:[]};
+  const tid = posted.get(edPost.id);
+  $("edTitle").textContent = edIsNew ? "New post" : "Edit post";
+  $("edLock").hidden = !tid; $("edLock").innerHTML = tid ? `Posted ✓ <a href="https://x.com/i/web/status/${tid}" target="_blank" rel="noopener">view on X</a>` : "";
+  $("edText").value = edPost.text || ""; $("edText").readOnly = !!tid;
+  $("edKind").value = edPost.kind || "post";
+  $("edDate").value = edPost.date || ""; $("edDate").min = nowParts().date;
+  $("edSlot").innerHTML = `<option value="">unscheduled</option>` + cfg.slots.map(s=>`<option ${s===edPost.slot?"selected":""}>${s}</option>`).join("");
+  for(const id of ["edDate","edSlot","edKind","addMediaBtn","edDelete"]) $(id).disabled = !!tid;
+  updateCount(); renderMedia(); $("editor").showModal();
+  if(!tid) setTimeout(()=>$("edText").focus(), 50);
+}
+function updateCount(){
+  const n = [...$("edText").value].length, c = $("edCount");
+  c.textContent = `${n} chars` + (n>280 ? " · long post (Premium)" : ""); c.className = "count" + (n>280?" long":"");
+  const d=$("edDate").value, s=$("edSlot").value;
+  $("edWhen").textContent = d && s ? (isPast(d,s) ? "⚠ this time has passed, it will post on the next run" : "") : "goes to Drafts";
+}
+$("edText").oninput = updateCount; $("edDate").onchange = updateCount; $("edSlot").onchange = updateCount;
+async function renderMedia(){
+  const box = $("mediaList"); box.innerHTML = "";
+  for(const [i,m] of (edPost.media||[]).entries()){
+    const div = document.createElement("div"); div.className = "mi";
+    div.innerHTML = `<div class="up">loading…</div>` + (posted.has(edPost.id)?"":`<button type="button" data-i="${i}">✕</button>`);
+    box.appendChild(div);
+    mediaURL(m.path).then(u=>{ div.querySelector(".up")?.remove(); const el = document.createElement(m.type==="video"?"video":"img"); el.src=u; if(m.type==="video"){ el.muted=true; el.controls=true; } div.prepend(el); }).catch(()=>{ div.querySelector(".up").textContent="can't load"; });
+  }
+}
+$("mediaList").onclick = e => { const b = e.target.closest("button[data-i]"); if(!b) return; edPost.media.splice(+b.dataset.i,1); renderMedia(); };
+$("addMediaBtn").onclick = () => $("edFile").click();
+$("edFile").onchange = async e => {
+  const files = [...e.target.files]; e.target.value = "";
+  for(const f of files){
+    const isVid = f.type.startsWith("video/");
+    const hasVid = edPost.media.some(m=>m.type==="video");
+    if(isVid && edPost.media.length){ alert("A video has to be the only media on a post."); continue; }
+    if(!isVid && (hasVid || edPost.media.length>=4)){ alert("Up to 4 images, or 1 video."); continue; }
+    if(!isVid && f.size > 5*1024*1024){ alert(`${f.name} is over 5 MB, X rejects images that big. Export it smaller (e.g. 1600 px wide).`); continue; }
+    if(f.size > 95*1024*1024){ alert(`${f.name} is over 95 MB; GitHub can't store files that big.`); continue; }
+    const ph = document.createElement("div"); ph.className="mi"; ph.innerHTML=`<div class="up">uploading ${Math.round(f.size/1024/1024*10)/10} MB…</div>`; $("mediaList").appendChild(ph);
+    try{ edPost.media.push(await uploadMedia(f, edPost.id)); }catch(err){ alert("Upload failed: "+err.message); }
+    renderMedia();
+  }
+};
+$("edCancel").onclick = () => $("editor").close();
+$("edDelete").onclick = () => {
+  if(edIsNew){ $("editor").close(); return; }
+  if(!confirm("Delete this post?")) return;
+  posts = posts.filter(p=>p.id!==edPost.id); $("editor").close(); markDirty();
+};
+$("edDone").onclick = () => {
+  if(posted.has(edPost.id)){ $("editor").close(); return; }
+  edPost.text = $("edText").value.replace(/\s+$/,""); edPost.kind = $("edKind").value;
+  const d = $("edDate").value || null, s = $("edSlot").value || null;
+  edPost.date = d && s ? d : null; edPost.slot = d && s ? s : null;
+  if(!edPost.text.trim() && !edPost.media.length){ if(edIsNew){ $("editor").close(); return; } }
+  if(edPost.date){
+    const other = posts.find(x=>x.date===edPost.date && x.slot===edPost.slot && x.id!==edPost.id);
+    if(other){
+      if(posted.has(other.id)){ alert("That slot already has a posted tweet."); return; }
+      const old = posts.find(x=>x.id===edPost.id);
+      if(!confirm(`That slot already has a post. ${old&&old.date?"Swap them":"Move the other one to Drafts"}?`)) return;
+      other.date = old&&old.date ? old.date : null; other.slot = old&&old.date ? old.slot : null;
+    }
+  }
+  const i = posts.findIndex(x=>x.id===edPost.id);
+  if(i<0) posts.push(edPost); else posts[i] = edPost;
+  $("editor").close(); markDirty();
+};
+
+/* ---------- settings ---------- */
+$("setBtn").onclick = () => { $("sRepo").value = repo; $("sToken").value = ""; $("sToken").placeholder = token ? "saved (leave empty to keep)" : "github_pat_…"; $("settings").showModal(); };
+$("sCancel").onclick = () => $("settings").close();
+$("sForget").onclick = () => { LS.del("xp.token"); location.reload(); };
+$("sSave").onclick = () => { LS.set("xp.repo", $("sRepo").value.trim()); const t=$("sToken").value.trim(); if(t) LS.set("xp.token", t); location.reload(); };
+
+/* ---------- demo data ---------- */
+function demoPosts(){
+  const n = nowParts(), out = [];
+  const q = ["The right people make you feel calmer, the wrong ones make you feel busy","Your reputation is built in the small tasks nobody checks","Meaning tends to show up while you are busy helping someone else"];
+  const qs = ["Would you talk to an AI version of yourself built from your memories\n\n🔸 Yes\n🔸 That's terrifying","Raise a huge round at a scary valuation, or a small one you can beat\n\n🔸 Huge\n🔸 Small"];
+  for(let i=0;i<10;i++){ out.push({id:"d"+i, date:addDays(n.date,i), slot:"12:00", kind:"quote", text:q[i%q.length], media:[]}); out.push({id:"e"+i, date:addDays(n.date,i), slot:"16:00", kind:"question", text:qs[i%qs.length], media:[]}); }
+  out.push({id:"x1", date:addDays(n.date,1), slot:"08:00", kind:"post", text:"I have a simple question:\n\nDid anyone actually get access to Gemini 4 Carbon?", media:[]});
+  out.push({id:"x2", date:null, slot:null, kind:"post", text:"Draft idea: AI subscription tier list by tasks solved per $1", media:[]});
+  return out;
+}
+
+setInterval(()=>{ if(!document.querySelector("dialog[open]") && !dragId) { if(!demo) loadPosted().then(render).catch(()=>{}); else render(); } }, 120000);
+load();
+</script>
+</body>
+</html>

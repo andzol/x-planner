@@ -94,6 +94,8 @@ label.file input{display:none}
 .lock{color:var(--green);font-size:13px}
 .lock a{color:var(--blue)}
 .muted{color:var(--mut);font-size:12px}
+.ref{margin-left:8px;padding:2px 8px;font:500 12px/1.5 ui-monospace,Consolas,monospace;color:var(--mut);background:var(--bg);border:1px solid var(--line);border-radius:6px;vertical-align:2px}
+.ref:hover{color:var(--txt)} .ref.ok{color:var(--green);border-color:var(--green)}
 dialog#editor.wide{width:min(900px,96vw)}
 .edcols{display:grid;grid-template-columns:210px minmax(0,1fr);column-gap:18px;row-gap:12px;align-items:start}
 #edQR{grid-column:1;grid-row:1} .edmain{grid-column:2;grid-row:1} .edqrbtn{grid-column:1;grid-row:2} .edbtns{grid-column:2;grid-row:2}
@@ -150,7 +152,7 @@ dialog#editor:not(.wide) .edqrbtn{display:none}
 </main>
 
 <dialog id="editor"><form method="dialog" class="dlg" id="edForm">
-  <h3 id="edTitle">Post</h3>
+  <h3><span id="edTitle">Post</span> <button type="button" id="edRef" class="ref" title="Copy the reference, paste it to Claude to edit this post"></button></h3>
   <div class="edcols"><div class="edmain">
   <div id="edLock" class="lock" hidden></div>
   <textarea id="edText" placeholder="What's happening?"></textarea>
@@ -197,7 +199,7 @@ dialog#editor:not(.wide) .edqrbtn{display:none}
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js"></script>
 <script>
 "use strict";
-const APP_VERSION = "2026.11.02.12";
+const APP_VERSION = "2026.11.02.13";
 const DAYS = 62, BRANCH = "master";
 const LS = {get:k=>{try{return localStorage.getItem(k)}catch(e){return null}}, set:(k,v)=>{try{localStorage.setItem(k,v)}catch(e){}}, del:k=>{try{localStorage.removeItem(k)}catch(e){}}};
 let repo = LS.get("xp.repo") || "andzol/x-wisdom-scheduler";
@@ -390,6 +392,7 @@ function openEditor(p, date, slot){
   edPost = p ? JSON.parse(JSON.stringify(p)) : {id:newId(), date, slot, kind:"post", text:"", media:[]};
   const tid = posted.get(edPost.id);
   $("edTitle").textContent = edIsNew ? "New post" : "Edit post";
+  $("edRef").hidden = edIsNew; $("edRef").textContent = "#" + edPost.id; $("edRef").classList.remove("ok");
   $("edLock").hidden = !tid; $("edLock").innerHTML = tid ? `Posted ✓ <a href="https://x.com/i/web/status/${tid}" target="_blank" rel="noopener">view on X</a>` : "";
   $("edText").value = edPost.text || ""; $("edText").readOnly = !!tid;
   $("edKind").value = edPost.kind || "post";
@@ -492,6 +495,14 @@ $("edLocal").onclick = () => {
   locals = [edPost, ...locals.filter(x=>x.id!==edPost.id)]; saveLocals();
   $("editor").close();
   if(wasSynced){ posts = posts.filter(x=>x.id!==edPost.id); markDirty(); } else render();
+};
+
+// the post's id: paste it to Claude, who edits planner/posts.json by id
+$("edRef").onclick = async () => {
+  const b = $("edRef"), id = edPost.id;
+  try{ await navigator.clipboard.writeText(`X Planner post #${id}`); b.textContent = "copied ✓"; b.classList.add("ok"); }
+  catch(e){ b.textContent = "#" + id; }
+  setTimeout(() => { if(edPost && edPost.id===id){ b.textContent = "#" + id; b.classList.remove("ok"); } }, 1500);
 };
 
 /* ---------- reopen after refresh ---------- */

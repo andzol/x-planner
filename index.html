@@ -197,7 +197,7 @@ dialog#editor:not(.wide) .edqrbtn{display:none}
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js"></script>
 <script>
 "use strict";
-const APP_VERSION = "2026.11.02.11";
+const APP_VERSION = "2026.11.02.12";
 const DAYS = 62, BRANCH = "master";
 const LS = {get:k=>{try{return localStorage.getItem(k)}catch(e){return null}}, set:(k,v)=>{try{localStorage.setItem(k,v)}catch(e){}}, del:k=>{try{localStorage.removeItem(k)}catch(e){}}};
 let repo = LS.get("xp.repo") || "andzol/x-wisdom-scheduler";
@@ -540,11 +540,11 @@ function drawQR(){
   $("qrBox").classList.remove("stale");
   qrMediaNote();
 }
-// edits redraw the QR after 10 s without typing, so the phone never scans a half-written post
+// edits redraw the QR after 3 s without typing, so the phone never scans a half-written post
 function queueQR(){
   if($("edQR").hidden){ drawQR(); return; }
   $("qrBox").classList.add("stale");
-  clearTimeout(qrTimer); qrTimer = setTimeout(drawQR, 10000);
+  clearTimeout(qrTimer); qrTimer = setTimeout(drawQR, 3000);
 }
 $("editor").addEventListener("close", () => { clearTimeout(qrTimer); LS.del("xp.open"); });
 $("qrPosted").onclick = () => {

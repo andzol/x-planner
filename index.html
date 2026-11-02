@@ -83,6 +83,10 @@ select,input[type=date],input[type=text],input[type=password]{background:var(--b
 #mediaList{display:flex;gap:8px;flex-wrap:wrap}
 .mi{position:relative;width:120px;height:90px;border-radius:8px;overflow:hidden;background:#000;border:1px solid var(--line)}
 .mi img,.mi video{width:100%;height:100%;object-fit:cover}
+.mi img,.mi video{cursor:zoom-in}
+dialog#viewer{background:transparent;border:0;padding:0;width:fit-content;height:fit-content;margin:auto;max-width:96vw;max-height:94vh;overflow:visible}
+dialog#viewer::backdrop{background:rgba(0,0,0,.85)}
+#viewer img,#viewer video{display:block;max-width:96vw;max-height:94vh;border-radius:10px;cursor:zoom-out}
 .mi button{position:absolute;top:4px;right:4px;padding:1px 7px;font-size:12px;background:rgba(0,0,0,.7)}
 .mi .up{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:12px;color:var(--mut);background:rgba(0,0,0,.6)}
 label.file{display:inline-block}
@@ -91,9 +95,13 @@ label.file input{display:none}
 .lock a{color:var(--blue)}
 .muted{color:var(--mut);font-size:12px}
 dialog#editor.wide{width:min(900px,96vw)}
-.edcols{display:flex;gap:18px;align-items:flex-start}
+.edcols{display:grid;grid-template-columns:210px minmax(0,1fr);column-gap:18px;row-gap:12px;align-items:start}
+#edQR{grid-column:1;grid-row:1} .edmain{grid-column:2;grid-row:1} .edqrbtn{grid-column:1;grid-row:2} .edbtns{grid-column:2;grid-row:2}
+dialog#editor:not(.wide) .edcols{grid-template-columns:minmax(0,1fr)}
+dialog#editor:not(.wide) .edmain,dialog#editor:not(.wide) .edbtns{grid-column:1}
+dialog#editor:not(.wide) .edqrbtn{display:none}
 .edmain{flex:1;min-width:0;display:flex;flex-direction:column;gap:12px}
-#edQR{order:-1;width:210px;flex:none;display:flex;flex-direction:column;gap:8px}
+#edQR{display:flex;flex-direction:column;gap:8px}
 .qrinfo{display:flex;flex-direction:column;gap:8px}
 #qrPosted{width:100%}
 #edQR[hidden]{display:none}
@@ -115,8 +123,8 @@ dialog#editor.wide{width:min(900px,96vw)}
   .hint{display:none}
   #gridwrap{height:auto;width:100%}
   td{min-width:150px}
-  .edcols{flex-direction:column}
-  #edQR{order:0;width:100%}
+  .edcols{display:flex;flex-direction:column}
+  .edmain{order:1} #edQR{order:2} .edqrbtn{order:3} .edbtns{order:4}
   .qrbox,#qrNote{display:none}
   #xLink{display:block}
 }
@@ -151,12 +159,22 @@ dialog#editor.wide{width:min(900px,96vw)}
   <div class="row">
     <label class="file"><button type="button" id="addMediaBtn">+ Image / video</button><input type="file" id="edFile" accept="image/png,image/jpeg,image/gif,image/webp,video/mp4,video/quicktime" multiple></label>
     <select id="edKind"><option value="post">Post</option><option value="quote">Quote</option><option value="question">Question</option></select>
-  </div>
-  <div class="row">
     <input type="date" id="edDate"><select id="edSlot"></select>
     <span class="muted" id="edWhen"></span>
   </div>
-  <div class="row">
+  </div>
+  <aside id="edQR" hidden>
+    <div class="qrbox" id="qrBox"></div>
+    <div class="qrinfo">
+      <div class="muted" id="qrNote"></div>
+      <div class="muted" id="qrMedia"></div>
+      <a id="xLink" href="#">Open in X app</a>
+    </div>
+  </aside>
+  <div class="edqrbtn">
+    <button type="button" id="qrPosted" hidden title="Use this after you posted it from your phone">Posted it, free the slot</button>
+  </div>
+  <div class="row edbtns">
     <button type="button" class="danger" id="edDelete">Delete</button>
     <span style="margin-left:auto"></span>
     <button type="button" id="edCancel">Cancel</button>
@@ -164,17 +182,9 @@ dialog#editor.wide{width:min(900px,96vw)}
     <button type="button" class="primary" id="edDone">Done</button>
   </div>
   </div>
-  <aside id="edQR" hidden>
-    <div class="qrbox" id="qrBox"></div>
-    <button type="button" id="qrPosted" hidden title="Use this after you posted it from your phone">Posted it, free the slot</button>
-    <div class="qrinfo">
-      <div class="muted" id="qrNote"></div>
-      <div class="muted" id="qrMedia"></div>
-      <a id="xLink" href="#">Open in X app</a>
-    </div>
-  </aside>
-  </div>
 </form></dialog>
+
+<dialog id="viewer"></dialog>
 
 <dialog id="settings"><form method="dialog" class="dlg">
   <h3>Settings <span class="muted" id="appVer"></span></h3>
@@ -187,7 +197,7 @@ dialog#editor.wide{width:min(900px,96vw)}
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js"></script>
 <script>
 "use strict";
-const APP_VERSION = "2026.11.02.9";
+const APP_VERSION = "2026.11.02.11";
 const DAYS = 62, BRANCH = "master";
 const LS = {get:k=>{try{return localStorage.getItem(k)}catch(e){return null}}, set:(k,v)=>{try{localStorage.setItem(k,v)}catch(e){}}, del:k=>{try{localStorage.removeItem(k)}catch(e){}}};
 let repo = LS.get("xp.repo") || "andzol/x-wisdom-scheduler";
@@ -237,14 +247,14 @@ async function load(){
     $("banner").textContent = "Demo mode: nothing is saved to GitHub. Open Settings and add a token to plan for real.";
     const saved = LS.get("xp.demo");
     posts = saved ? JSON.parse(saved) : demoPosts();
-    render(); setStatus("demo"); return;
+    render(); setStatus("demo"); restoreOpen(); return;
   }
   setStatus("loading…");
   try{
     try{ cfg = JSON.parse(await getText("planner/config.json")); }catch(e){ if(e.status!==404) throw e; }
     const p = await getJSONWithSha("planner/posts.json"); posts = p.data.posts; sha = p.sha;
     await loadPosted();
-    lastSync = nowParts().time; render(); setStatus(`live · synced ${lastSync}`, "ok live");
+    lastSync = nowParts().time; render(); setStatus(`live · synced ${lastSync}`, "ok live"); restoreOpen();
   }catch(e){ setStatus(e.message, "err"); console.error(e); }
 }
 async function loadPosted(){
@@ -387,7 +397,7 @@ function openEditor(p, date, slot){
   $("edSlot").innerHTML = `<option value="">unscheduled</option>` + cfg.slots.map(s=>`<option ${s===edPost.slot?"selected":""}>${s}</option>`).join("");
   for(const id of ["edDate","edSlot","edKind","addMediaBtn","edDelete"]) $(id).disabled = !!tid;
   $("edLocal").hidden = !!tid;
-  updateCount(); renderMedia(); drawQR(); $("editor").showModal();
+  updateCount(); renderMedia(); drawQR(); $("editor").showModal(); rememberOpen();
   if(!tid) setTimeout(()=>$("edText").focus(), 50);
 }
 function updateCount(){
@@ -396,17 +406,27 @@ function updateCount(){
   const d=$("edDate").value, s=$("edSlot").value;
   $("edWhen").textContent = d && s ? (isPast(d,s) ? "⚠ this time has passed, it will post on the next run" : `posts in ${fmtMins(minsUntil(d,s))}`) : edIsLocal ? "stays in this browser only" : "goes to Drafts";
 }
-$("edText").oninput = () => { updateCount(); queueQR(); }; $("edDate").onchange = updateCount; $("edSlot").onchange = updateCount;
+$("edText").oninput = () => { updateCount(); queueQR(); rememberOpen(); }; $("edDate").onchange = updateCount; $("edSlot").onchange = updateCount;
 async function renderMedia(){
   const box = $("mediaList"); box.innerHTML = ""; qrMediaNote();
   for(const [i,m] of (edPost.media||[]).entries()){
     const div = document.createElement("div"); div.className = "mi";
     div.innerHTML = `<div class="up">loading…</div>` + (posted.has(edPost.id)?"":`<button type="button" data-i="${i}">✕</button>`);
     box.appendChild(div);
-    mediaURL(m.path).then(u=>{ div.querySelector(".up")?.remove(); const el = document.createElement(m.type==="video"?"video":"img"); el.src=u; if(m.type==="video"){ el.muted=true; el.controls=true; } div.prepend(el); }).catch(()=>{ div.querySelector(".up").textContent="can't load"; });
+    mediaURL(m.path).then(u=>{ div.querySelector(".up")?.remove(); const el = document.createElement(m.type==="video"?"video":"img"); el.src=u; if(m.type==="video"){ el.muted=true; el.preload="metadata"; } div.prepend(el); }).catch(()=>{ div.querySelector(".up").textContent="can't load"; });
   }
 }
-$("mediaList").onclick = e => { const b = e.target.closest("button[data-i]"); if(!b) return; edPost.media.splice(+b.dataset.i,1); renderMedia(); };
+// click an image or video to see it large; click again or Esc to close
+function showLarge(src, isVideo){
+  const v = $("viewer");
+  v.innerHTML = isVideo ? `<video src="${src}" controls autoplay></video>` : `<img src="${src}" alt="">`;
+  v.showModal();
+}
+$("viewer").addEventListener("click", e => { if(e.target.tagName!=="VIDEO") $("viewer").close(); });
+$("viewer").addEventListener("close", () => { $("viewer").innerHTML = ""; });
+$("mediaList").onclick = e => {
+  const m = e.target.closest(".mi img, .mi video"); if(m){ showLarge(m.src, m.tagName==="VIDEO"); return; }
+  const b = e.target.closest("button[data-i]"); if(!b) return; edPost.media.splice(+b.dataset.i,1); renderMedia(); };
 $("addMediaBtn").onclick = () => $("edFile").click();
 $("edFile").onchange = e => { const files = [...e.target.files]; e.target.value = ""; addFiles(files); };
 // Ctrl+V in the text box: an image or video on the clipboard becomes media, plain text pastes as usual
@@ -474,6 +494,22 @@ $("edLocal").onclick = () => {
   if(wasSynced){ posts = posts.filter(x=>x.id!==edPost.id); markDirty(); } else render();
 };
 
+/* ---------- reopen after refresh ---------- */
+function rememberOpen(){
+  if(!edPost) return;
+  LS.set("xp.open", JSON.stringify({id:edPost.id, isNew:edIsNew, date:edPost.date, slot:edPost.slot, text:$("edText").value}));
+}
+function restoreOpen(){
+  let o; try{ o = JSON.parse(LS.get("xp.open")||"null"); }catch(e){ o = null; }
+  if(!o || $("editor").open) return;
+  const p = o.isNew ? null : findPost(o.id);
+  if(!o.isNew && !p){ LS.del("xp.open"); return; }
+  openEditor(p, o.date, o.slot);
+  if(o.isNew) edPost.id = o.id;
+  if(typeof o.text === "string" && o.text !== $("edText").value){ $("edText").value = o.text; updateCount(); drawQR(); }
+  rememberOpen();
+}
+
 /* ---------- QR: post from the phone ---------- */
 // twitter://post opens the X app composer with the text (https://x.com/intent would open Safari)
 let qrTimer = null;
@@ -510,7 +546,7 @@ function queueQR(){
   $("qrBox").classList.add("stale");
   clearTimeout(qrTimer); qrTimer = setTimeout(drawQR, 10000);
 }
-$("editor").addEventListener("close", () => clearTimeout(qrTimer));
+$("editor").addEventListener("close", () => { clearTimeout(qrTimer); LS.del("xp.open"); });
 $("qrPosted").onclick = () => {
   if(edIsLocal){ locals = locals.filter(p=>p.id!==edPost.id); saveLocals(); $("editor").close(); render(); return; }
   if(edIsNew){ $("editor").close(); return; }

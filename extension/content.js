@@ -38,7 +38,9 @@
     const btn = ev.currentTarget;
     const root = composerOf(btn);
     if (!root) return toast("Couldn't find the composer", true);
-    if (root.querySelectorAll('[data-testid^="tweetTextarea_"]').length > 1) return toast("Threads aren't supported yet, schedule one post at a time", true);
+    // one box per thread post is tweetTextarea_0, _1, …; X also has tweetTextarea_0_label and _0RichTextInputContainer
+    const boxes = [...root.querySelectorAll('[data-testid^="tweetTextarea_"]')].filter((e) => /^tweetTextarea_\d+$/.test(e.dataset.testid));
+    if (boxes.length > 1) return toast("Threads aren't supported yet, schedule one post at a time", true);
     const text = (root.querySelector('[data-testid="tweetTextarea_0"]')?.innerText || "").replace(/​/g, "").replace(/\s+$/, "");
     const att = root.querySelector('[data-testid="attachments"]');
     const urls = att ? [...att.querySelectorAll("video[src], img[src]")].map((m) => m.src).filter((u) => u.startsWith("blob:") || u.startsWith("data:")) : [];

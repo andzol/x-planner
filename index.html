@@ -54,6 +54,14 @@ td.slot.past .empty{cursor:default;font-size:11px}
 .card.posted .k{color:var(--green)!important}
 .card.missed{border-color:#5a3d10}
 .card.dragging{opacity:.35}
+.card.local{border-style:dashed;border-left-style:solid}
+.badge.loc{color:var(--mut)}
+td.slot.next{box-shadow:inset 0 3px 0 var(--blue)}
+td.slot.next .empty::after{content:"next";font-size:11px;margin-left:6px;color:var(--blue)}
+#clock{font-size:13px;color:var(--mut)}
+#clock b{color:var(--txt)}
+#status.live::before{content:"";display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--green);margin-right:6px;vertical-align:1px;animation:pulse 2s infinite}
+@keyframes pulse{50%{opacity:.3}}
 .card .badge{margin-left:auto}
 .badge.ok{color:var(--green)} .badge.warn{color:var(--amber)}
 dialog{background:var(--panel);color:var(--txt);border:1px solid var(--line);border-radius:14px;padding:0;width:min(620px,94vw)}
@@ -90,6 +98,7 @@ label.file input{display:none}
 <header>
   <h1>X Planner</h1>
   <span id="status">loading…</span>
+  <span id="clock"></span>
   <span class="stat" id="stats"></span>
   <button id="newBtn">+ New draft</button>
   <button id="setBtn">Settings</button>
@@ -99,7 +108,7 @@ label.file input{display:none}
   <aside id="tray">
     <h2>Drafts <span id="draftCount"></span></h2>
     <div id="drafts"></div>
-    <div class="hint">Drag a card into a slot to schedule it. Drag it back here to unschedule. Dropping on a filled slot swaps the two posts.</div>
+    <div class="hint">Drag a card into a slot to schedule it. Drag it back here to unschedule. Dropping on a filled slot swaps the two posts. Cards marked <b>local</b> live only in this browser and never post until you drag them into a slot.</div>
   </aside>
   <div id="gridwrap"><table id="grid"></table></div>
 </main>
@@ -122,6 +131,7 @@ label.file input{display:none}
     <button type="button" class="danger" id="edDelete">Delete</button>
     <span style="margin-left:auto"></span>
     <button type="button" id="edCancel">Cancel</button>
+    <button type="button" id="edLocal" title="Keep it unscheduled, stored only in this browser">Save draft locally</button>
     <button type="button" class="primary" id="edDone">Done</button>
   </div>
 </form></dialog>
@@ -144,6 +154,11 @@ const demo = !token;
 
 let cfg = {timezone:"Europe/Budapest", slots:["06:00","08:00","10:00","12:00","14:00","16:00"]};
 let posts = [], posted = new Map(), sha = null, dirty = false, saving = false, saveTimer = null;
+let locals = (()=>{ try{ return JSON.parse(LS.get("xp.local")||"[]"); }catch(e){ return []; } })(); // drafts kept in this browser only
+let ver = 0, lastSync = "";      // ver bumps on every change so a background refresh never overwrites it
+const saveLocals = () => LS.set("xp.local", JSON.stringify(locals));
+const isLocal = id => locals.some(p=>p.id===id);
+const findPost = id => posts.find(p=>p.id===id) || locals.find(p=>p.id===id);
 const mediaCache = new Map();   // repo path -> object URL
 const pendingMedia = new Map(); // repo path -> {file, url} not yet uploaded (demo mode keeps them here)
 
@@ -157,12 +172,14 @@ function nowParts(){
   return {date:`${p.year}-${p.month}-${p.day}`, time:`${p.hour==="24"?"00":p.hour}:${p.minute}`};
 }
 const isPast = (date, slot) => { const n = nowParts(); return date < n.date || (date === n.date && slot <= n.time); };
+function minsUntil(date, slot){ const n = nowParts(); const [h,m]=slot.split(":").map(Number), [nh,nm]=n.time.split(":").map(Number); return (Date.parse(date+"T00:00Z")-Date.parse(n.date+"T00:00Z"))/60000 + h*60+m - (nh*60+nm); }
+function fmtMins(x){ return x < 60 ? `${x}m` : x < 1440 ? `${Math.floor(x/60)}h ${x%60}m` : `${Math.floor(x/1440)}d ${Math.floor(x%1440/60)}h`; }
 function addDays(iso, n){ const d = new Date(iso+"T12:00:00Z"); d.setUTCDate(d.getUTCDate()+n); return d.toISOString().slice(0,10); }
 function dayLabel(iso){ const d = new Date(iso+"T12:00:00Z"); return {wd:d.toLocaleDateString("en-US",{weekday:"short",timeZone:"UTC"}), md:d.toLocaleDateString("en-US",{month:"short",day:"numeric",timeZone:"UTC"}), dow:d.getUTCDay()}; }
 
 /* ---------- GitHub API ---------- */
 async function gh(path, opts={}){
-  const r = await fetch(`https://api.github.com/repos/${repo}/${path}`, {...opts, headers:{Authorization:`Bearer ${token}`, Accept:"application/vnd.github+json", "X-GitHub-Api-Version":"2022-11-28", ...(opts.headers||{})}});
+  const r = await fetch(`https://api.github.com/repos/${repo}/${path}`, {cache:"no-store", ...opts, headers:{Authorization:`Bearer ${token}`, Accept:"application/vnd.github+json", "X-GitHub-Api-Version":"2022-11-28", ...(opts.headers||{})}});
   if(!r.ok){ const t = await r.text(); const e = new Error(`GitHub ${r.status}: ${t.slice(0,200)}`); e.status = r.status; throw e; }
   return r;
 }
@@ -185,7 +202,7 @@ async function load(){
     try{ cfg = JSON.parse(await getText("planner/config.json")); }catch(e){ if(e.status!==404) throw e; }
     const p = await getJSONWithSha("planner/posts.json"); posts = p.data.posts; sha = p.sha;
     await loadPosted();
-    render(); setStatus("synced", "ok");
+    lastSync = nowParts().time; render(); setStatus(`live · synced ${lastSync}`, "ok live");
   }catch(e){ setStatus(e.message, "err"); console.error(e); }
 }
 async function loadPosted(){
@@ -195,7 +212,7 @@ async function loadPosted(){
   }catch(e){ if(e.status!==404) throw e; }
 }
 function markDirty(){
-  dirty = true; render();
+  dirty = true; ver++; render();
   if(demo){ LS.set("xp.demo", JSON.stringify(posts)); return; }
   setStatus("unsaved changes…");
   clearTimeout(saveTimer); saveTimer = setTimeout(save, 1200);
@@ -203,11 +220,11 @@ function markDirty(){
 async function save(){
   if(demo || !dirty) return;
   if(saving){ clearTimeout(saveTimer); saveTimer = setTimeout(save, 800); return; }
-  saving = true; setStatus("saving…");
+  saving = true; setStatus("saving…"); const v0 = ver;
   try{
     const body = {message:"planner: update posts", branch:BRANCH, content:b64utf8(JSON.stringify({posts}, null, 1)+"\n"), sha};
     const r = await gh("contents/planner/posts.json", {method:"PUT", body:JSON.stringify(body)});
-    sha = (await r.json()).content.sha; dirty = false; setStatus("saved", "ok");
+    sha = (await r.json()).content.sha; if(ver===v0) dirty = false; ver++; lastSync = nowParts().time; setStatus(`live · saved ${lastSync}`, "ok live");
   }catch(e){
     if(e.status===409 || e.status===422){ setStatus("changed elsewhere, reloading…", "err"); alert("posts.json was changed from another device. Reloading the latest version; redo your last change."); dirty=false; await load(); }
     else setStatus("save failed: "+e.message, "err");
@@ -240,6 +257,8 @@ function render(){
   const n = nowParts();
   const start = n.date, bySlot = new Map(), drafts = [];
   for(const p of posts){ if(p.date && p.slot) bySlot.set(slotKey(p.date,p.slot), p); else drafts.push(p); }
+  drafts.unshift(...locals);
+  let nextKey = null;
   let html = `<tr><th class="day">Day</th>${cfg.slots.map(s=>`<th>${s} <span style="color:var(--faint)">${tzShort()}</span></th>`).join("")}</tr>`;
   let empty = 0, filled = 0;
   for(let i=0;i<DAYS;i++){
@@ -249,7 +268,8 @@ function render(){
     for(const s of cfg.slots){
       const p = bySlot.get(slotKey(d,s)), past = isPast(d,s);
       if(!p && !past) empty++; if(p) filled++;
-      cells += `<td class="slot${past?" past":""}" data-date="${d}" data-slot="${s}">${p?cardHTML(p):`<div class="empty">${past?"":"+"}</div>`}</td>`;
+      const nx = !past && !nextKey; if(nx) nextKey = slotKey(d,s);
+      cells += `<td class="slot${past?" past":""}${nx?" next":""}" data-date="${d}" data-slot="${s}">${p?cardHTML(p):`<div class="empty">${past?"":"+"}</div>`}</td>`;
     }
     html += `<tr class="${i===0?"today":""}${L.dow===0||L.dow===6?" weekend":""}"><td class="day"><b>${L.wd} ${L.md}</b><div class="fill" style="color:${cnt===cfg.slots.length?"var(--green)":cnt?"var(--mut)":"var(--faint)"}">${cnt}/${cfg.slots.length}</div></td>${cells}</tr>`;
   }
@@ -258,15 +278,16 @@ function render(){
   $("drafts").innerHTML = drafts.map(cardHTML).join("") || `<div class="hint">No unscheduled drafts</div>`;
   $("draftCount").textContent = drafts.length || "";
   $("stats").innerHTML = `<b>${filled}</b> planned · <b>${empty}</b> empty slots in ${DAYS} days`;
-  hydrateThumbs();
+  hydrateThumbs(); tick(true);
 }
 function tzShort(){ try{ return new Intl.DateTimeFormat("en-GB",{timeZone:cfg.timezone,timeZoneName:"short"}).formatToParts(new Date()).find(x=>x.type==="timeZoneName").value; }catch(e){ return ""; } }
 function cardHTML(p){
   const tid = posted.get(p.id), past = p.date && p.slot && isPast(p.date,p.slot);
   const kind = p.kind || "post";
   const img = (p.media||[]).find(m=>m.type==="image"), vid = (p.media||[]).find(m=>m.type==="video");
-  const cls = ["card", kind, tid?"posted":"", !tid&&past?"missed":""].join(" ");
-  const badge = tid ? `<span class="badge ok">✓ posted</span>` : past ? `<span class="badge warn">posting…</span>` : "";
+  const loc = isLocal(p.id), late = past && !tid ? -minsUntil(p.date,p.slot) : 0;
+  const cls = ["card", kind, tid?"posted":"", !tid&&past?"missed":"", loc?"local":""].join(" ");
+  const badge = tid ? `<span class="badge ok">✓ posted</span>` : past ? `<span class="badge warn">${late>40?"⚠ not posted yet":"posting…"}</span>` : loc ? `<span class="badge loc">local</span>` : "";
   return `<div class="${cls}" draggable="${tid?"false":"true"}" data-id="${esc(p.id)}">
     ${img?`<img class="thumb" data-path="${esc(img.path)}" alt="">`:""}
     <div class="t">${esc((p.text||"(no text)").replace(/\n{2,}/g,"\n"))}</div>
@@ -291,8 +312,9 @@ document.addEventListener("dragover", e => {
 });
 document.addEventListener("drop", e => {
   const t = dropTarget(e.target); if(!t || !dragId) return; e.preventDefault(); t.classList.remove("over");
-  const p = posts.find(x=>x.id===dragId); if(!p) return;
-  if(t.id==="drafts"){ p.date=null; p.slot=null; markDirty(); return; }
+  const p = findPost(dragId); if(!p) return;
+  if(t.id==="drafts"){ if(isLocal(p.id)) return; p.date=null; p.slot=null; markDirty(); return; }
+  if(isLocal(p.id)){ locals = locals.filter(x=>x.id!==p.id); saveLocals(); posts.push(p); } // scheduling a local draft syncs it
   const d = t.dataset.date, s = t.dataset.slot;
   const other = posts.find(x=>x.date===d && x.slot===s && x.id!==p.id);
   if(other){ if(posted.has(other.id)) return; other.date = p.date; other.slot = p.slot; }
@@ -304,15 +326,15 @@ function dropTarget(el){
 }
 
 /* ---------- editor ---------- */
-let edPost = null, edIsNew = false;
+let edPost = null, edIsNew = false, edIsLocal = false;
 document.addEventListener("click", e => {
-  const c = e.target.closest(".card"); if(c){ openEditor(posts.find(p=>p.id===c.dataset.id)); return; }
+  const c = e.target.closest(".card"); if(c){ openEditor(findPost(c.dataset.id)); return; }
   const em = e.target.closest("td.slot:not(.past) .empty"); if(em){ const td = em.closest("td"); openEditor(null, td.dataset.date, td.dataset.slot); }
 });
 $("newBtn").onclick = () => openEditor(null, null, null);
 function newId(){ return "p" + Date.now().toString(36) + Math.random().toString(36).slice(2,6); }
 function openEditor(p, date, slot){
-  edIsNew = !p;
+  edIsNew = !p; edIsLocal = !!p && isLocal(p.id);
   edPost = p ? JSON.parse(JSON.stringify(p)) : {id:newId(), date, slot, kind:"post", text:"", media:[]};
   const tid = posted.get(edPost.id);
   $("edTitle").textContent = edIsNew ? "New post" : "Edit post";
@@ -322,6 +344,7 @@ function openEditor(p, date, slot){
   $("edDate").value = edPost.date || ""; $("edDate").min = nowParts().date;
   $("edSlot").innerHTML = `<option value="">unscheduled</option>` + cfg.slots.map(s=>`<option ${s===edPost.slot?"selected":""}>${s}</option>`).join("");
   for(const id of ["edDate","edSlot","edKind","addMediaBtn","edDelete"]) $(id).disabled = !!tid;
+  $("edLocal").hidden = !!tid;
   updateCount(); renderMedia(); $("editor").showModal();
   if(!tid) setTimeout(()=>$("edText").focus(), 50);
 }
@@ -329,7 +352,7 @@ function updateCount(){
   const n = [...$("edText").value].length, c = $("edCount");
   c.textContent = `${n} chars` + (n>280 ? " · long post (Premium)" : ""); c.className = "count" + (n>280?" long":"");
   const d=$("edDate").value, s=$("edSlot").value;
-  $("edWhen").textContent = d && s ? (isPast(d,s) ? "⚠ this time has passed, it will post on the next run" : "") : "goes to Drafts";
+  $("edWhen").textContent = d && s ? (isPast(d,s) ? "⚠ this time has passed, it will post on the next run" : `posts in ${fmtMins(minsUntil(d,s))}`) : edIsLocal ? "stays in this browser only" : "goes to Drafts";
 }
 $("edText").oninput = updateCount; $("edDate").onchange = updateCount; $("edSlot").onchange = updateCount;
 async function renderMedia(){
@@ -361,6 +384,7 @@ $("edCancel").onclick = () => $("editor").close();
 $("edDelete").onclick = () => {
   if(edIsNew){ $("editor").close(); return; }
   if(!confirm("Delete this post?")) return;
+  if(edIsLocal){ locals = locals.filter(p=>p.id!==edPost.id); saveLocals(); $("editor").close(); render(); return; }
   posts = posts.filter(p=>p.id!==edPost.id); $("editor").close(); markDirty();
 };
 $("edDone").onclick = () => {
@@ -378,9 +402,24 @@ $("edDone").onclick = () => {
       other.date = old&&old.date ? old.date : null; other.slot = old&&old.date ? old.slot : null;
     }
   }
+  if(edIsLocal){
+    locals = locals.filter(x=>x.id!==edPost.id);
+    if(!edPost.date){ locals.unshift(edPost); saveLocals(); $("editor").close(); render(); return; }
+    saveLocals();
+  }
   const i = posts.findIndex(x=>x.id===edPost.id);
   if(i<0) posts.push(edPost); else posts[i] = edPost;
   $("editor").close(); markDirty();
+};
+$("edLocal").onclick = () => {
+  if(posted.has(edPost.id)) return;
+  edPost.text = $("edText").value.replace(/\s+$/,""); edPost.kind = $("edKind").value;
+  if(!edPost.text.trim() && !edPost.media.length){ $("editor").close(); return; }
+  edPost.date = null; edPost.slot = null;
+  const wasSynced = posts.some(x=>x.id===edPost.id);
+  locals = [edPost, ...locals.filter(x=>x.id!==edPost.id)]; saveLocals();
+  $("editor").close();
+  if(wasSynced){ posts = posts.filter(x=>x.id!==edPost.id); markDirty(); } else render();
 };
 
 /* ---------- settings ---------- */
@@ -400,7 +439,35 @@ function demoPosts(){
   return out;
 }
 
-setInterval(()=>{ if(!document.querySelector("dialog[open]") && !dragId) { if(!demo) loadPosted().then(render).catch(()=>{}); else render(); } }, 120000);
+/* ---------- live: clock every 15 s, data from GitHub every 60 s and whenever the tab comes back ---------- */
+let lastPastSig = "", refreshing = false;
+function tick(fromRender=false){
+  const n = nowParts();
+  const next = posts.filter(p=>p.date && p.slot && !posted.has(p.id) && !isPast(p.date,p.slot)).sort((a,b)=>(a.date+a.slot).localeCompare(b.date+b.slot))[0];
+  $("clock").innerHTML = `<b>${n.time}</b> ${tzShort()}` + (next ? ` · next post <b>${next.date===n.date?"":dayLabel(next.date).wd+" "}${next.slot}</b> in ${fmtMins(minsUntil(next.date,next.slot))}` : " · nothing scheduled");
+  // re-render when a slot passes (and every 20 min for the late badge) so the grid is never stale
+  const sig = n.date + "|" + cfg.slots.filter(s=>s<=n.time).length + "|" + Math.floor(+n.time.slice(0,2)*3 + +n.time.slice(3)/20);
+  if(!fromRender && sig!==lastPastSig && !dragId){ lastPastSig = sig; render(); return; }
+  lastPastSig = sig;
+}
+async function refresh(){
+  if(demo){ if(!dragId) render(); return; }
+  if(refreshing || saving) return;
+  refreshing = true; const v = ver;
+  try{
+    const p = await getJSONWithSha("planner/posts.json");
+    await loadPosted();
+    if(ver===v && !dirty && !saving && p.sha!==sha){ posts = p.data.posts; sha = p.sha; }
+    lastSync = nowParts().time;
+    if(!dirty) setStatus(`live · synced ${lastSync}`, "ok live");
+    if(!dragId) render();
+  }catch(e){ setStatus(`offline, retrying (${e.message.slice(0,60)})`, "err"); }
+  finally{ refreshing = false; }
+}
+setInterval(()=>tick(), 15000);
+setInterval(()=>{ if(!document.hidden) refresh(); }, 60000);
+document.addEventListener("visibilitychange", ()=>{ if(!document.hidden) refresh(); });
+window.addEventListener("focus", ()=>refresh());
 load();
 </script>
 </body>

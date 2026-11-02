@@ -62,14 +62,26 @@
     }
   }
 
+  // only the "What's happening?" pop-up for a brand new post: replies and quotes show the
+  // original tweet (it has a <time> and a /status/ link), the inline Home and reply boxes have no dialog
+  function isNewPostComposer(post) {
+    const dialog = post.closest('[role="dialog"]');
+    return !!dialog && !dialog.querySelector('time, a[href*="/status/"], [data-testid="tweet"]');
+  }
+
   function inject() {
     for (const post of document.querySelectorAll(POST_BTNS)) {
-      if (post.previousElementSibling?.classList.contains("xps-btn")) continue;
+      // X stacks its Post button in a column wrapper, so the Schedule button goes beside that wrapper
+      const slot = post.parentElement, row = slot?.parentElement;
+      const mine = row?.querySelector(":scope > .xps-btn");
+      const want = isNewPostComposer(post);
+      if (!want) { mine?.remove(); continue; }
+      if (mine || !row) continue;
       const b = document.createElement("button");
       b.type = "button"; b.className = "xps-btn"; b.textContent = "Schedule";
       b.title = "Put this post into the next free X Planner slot";
       b.addEventListener("click", onSchedule);
-      post.parentElement.insertBefore(b, post);
+      row.insertBefore(b, slot);
     }
   }
 

@@ -2,6 +2,8 @@
 // background worker, which drops the post into the next free X Planner slot.
 (() => {
   const POST_BTNS = '[data-testid="tweetButton"], [data-testid="tweetButtonInline"]';
+  // calendar with a clock
+  const ICON = '<svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 10V6a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2h5"/><path d="M16 2v4M8 2v4M3 10h18"/><circle cx="17.5" cy="17.5" r="4.5"/><path d="M17.5 15.5v2l1.3 1.1"/></svg>';
 
   function toast(html, err = false) {
     document.querySelector(".xps-toast")?.remove();
@@ -41,7 +43,7 @@
     const att = root.querySelector('[data-testid="attachments"]');
     const urls = att ? [...att.querySelectorAll("video[src], img[src]")].map((m) => m.src).filter((u) => u.startsWith("blob:") || u.startsWith("data:")) : [];
     if (!text.trim() && !urls.length) return toast("Nothing to schedule yet", true);
-    btn.disabled = true; const label = btn.textContent; btn.textContent = "Scheduling…";
+    btn.disabled = true; btn.classList.add("busy");
     try {
       const media = [];
       for (const u of urls) media.push(await toB64(u));
@@ -58,7 +60,7 @@
     } catch (e) {
       toast("Schedule failed: " + e.message, true);
     } finally {
-      btn.disabled = false; btn.textContent = label;
+      btn.disabled = false; btn.classList.remove("busy");
     }
   }
 
@@ -78,10 +80,11 @@
       if (!want) { mine?.remove(); continue; }
       if (mine || !row) continue;
       const b = document.createElement("button");
-      b.type = "button"; b.className = "xps-btn"; b.textContent = "Schedule";
-      b.title = "Put this post into the next free X Planner slot";
+      b.type = "button"; b.className = "xps-btn"; b.innerHTML = ICON;
+      b.title = "Schedule: put this post into the next free X Planner slot";
+      b.setAttribute("aria-label", "Schedule");
       b.addEventListener("click", onSchedule);
-      row.insertBefore(b, slot);
+      row.insertBefore(b, slot.nextSibling);
     }
   }
 

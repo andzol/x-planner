@@ -146,7 +146,7 @@ label.file input{display:none}
 </form></dialog>
 
 <dialog id="settings"><form method="dialog" class="dlg">
-  <h3>Settings</h3>
+  <h3>Settings <span class="muted" id="appVer"></span></h3>
   <div class="muted">The planner reads and writes <code>planner/posts.json</code> in your scheduler repo through the GitHub API. The token stays in this browser only.</div>
   <label class="muted">Repository<br><input type="text" id="sRepo" style="width:100%"></label>
   <label class="muted">Fine-grained token (only this repo, Contents: read and write)<br><input type="password" id="sToken" style="width:100%" autocomplete="off"></label>
@@ -155,6 +155,7 @@ label.file input{display:none}
 
 <script>
 "use strict";
+const APP_VERSION = "2026.11.02.4";
 const DAYS = 62, BRANCH = "master";
 const LS = {get:k=>{try{return localStorage.getItem(k)}catch(e){return null}}, set:(k,v)=>{try{localStorage.setItem(k,v)}catch(e){}}, del:k=>{try{localStorage.removeItem(k)}catch(e){}}};
 let repo = LS.get("xp.repo") || "andzol/x-wisdom-scheduler";
@@ -379,7 +380,9 @@ $("edFile").onchange = e => { const files = [...e.target.files]; e.target.value 
 // Ctrl+V in the text box: an image or video on the clipboard becomes media, plain text pastes as usual
 $("edText").addEventListener("paste", e => {
   if($("edText").readOnly) return;
-  const files = [...(e.clipboardData?.files||[])].filter(f=>/^(image|video)\//.test(f.type));
+  const cd = e.clipboardData; if(!cd) return;
+  let files = [...(cd.items||[])].filter(i=>i.kind==="file" && /^(image|video)\//.test(i.type)).map(i=>i.getAsFile()).filter(Boolean);
+  if(!files.length) files = [...(cd.files||[])].filter(f=>/^(image|video)\//.test(f.type));
   if(!files.length) return;
   e.preventDefault();
   addFiles(files.map(f => f.name && f.name!=="image.png" ? f : new File([f], `pasted-${Date.now().toString(36)}.${(f.type.split("/")[1]||"png").replace("jpeg","jpg").replace("quicktime","mov")}`, {type:f.type})));
@@ -481,10 +484,22 @@ async function refresh(){
   }catch(e){ setStatus(`offline, retrying (${e.message.slice(0,60)})`, "err"); }
   finally{ refreshing = false; }
 }
+// GitHub Pages lets browsers cache the page for 10 minutes; check for a newer build and offer a reload
+let lastVerCheck = 0;
+async function checkVersion(){
+  if(Date.now()-lastVerCheck < 120000) return; lastVerCheck = Date.now();
+  try{
+    const html = await (await fetch(location.pathname+"?v="+Date.now(), {cache:"no-store"})).text();
+    const v = (html.match(/APP_VERSION = "([^"]+)"/)||[])[1];
+    if(v && v!==APP_VERSION){ const b=$("banner"); b.style.display="block"; b.innerHTML = `A new version of the planner is out. <a href="#" style="color:#f5c26b;font-weight:700" onclick="location.reload();return false">Reload</a>`; }
+  }catch(e){}
+}
 setInterval(()=>tick(), 15000);
+setInterval(checkVersion, 120000); document.addEventListener("visibilitychange", ()=>{ if(!document.hidden) checkVersion(); });
 setInterval(()=>{ if(!document.hidden) refresh(); }, 60000);
 document.addEventListener("visibilitychange", ()=>{ if(!document.hidden) refresh(); });
 window.addEventListener("focus", ()=>refresh());
+$("appVer").textContent = "v" + APP_VERSION;
 load();
 </script>
 </body>

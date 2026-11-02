@@ -90,6 +90,16 @@ label.file input{display:none}
 .lock{color:var(--green);font-size:13px}
 .lock a{color:var(--blue)}
 .muted{color:var(--mut);font-size:12px}
+dialog#editor.wide{width:min(900px,96vw)}
+.edcols{display:flex;gap:18px;align-items:flex-start}
+.edmain{flex:1;min-width:0;display:flex;flex-direction:column;gap:12px}
+#edQR{width:230px;flex:none;display:flex;flex-direction:column;gap:8px}
+#edQR[hidden]{display:none}
+.qrbox{background:#fff;border-radius:10px;padding:10px;aspect-ratio:1;transition:opacity .2s}
+.qrbox svg{width:100%;height:100%;display:block}
+.qrbox.stale{opacity:.3}
+#qrMedia{color:var(--amber)}
+#xLink{display:none;text-align:center;background:var(--blue);color:#fff;border-radius:8px;padding:9px;font-weight:600;text-decoration:none}
 @media (max-width:760px){
   body{height:auto;overflow:visible;display:block}
   header{position:sticky;top:0}
@@ -100,6 +110,10 @@ label.file input{display:none}
   .hint{display:none}
   #gridwrap{height:auto;width:100%}
   td{min-width:150px}
+  .edcols{flex-direction:column}
+  #edQR{width:100%}
+  .qrbox,#qrNote{display:none}
+  #xLink{display:block}
 }
 </style>
 </head>
@@ -124,6 +138,7 @@ label.file input{display:none}
 
 <dialog id="editor"><form method="dialog" class="dlg" id="edForm">
   <h3 id="edTitle">Post</h3>
+  <div class="edcols"><div class="edmain">
   <div id="edLock" class="lock" hidden></div>
   <textarea id="edText" placeholder="What's happening?"></textarea>
   <div class="row"><span class="muted">Media: up to 4 images, or 1 video · Ctrl+V pastes an image</span><span class="count" id="edCount">0</span></div>
@@ -143,6 +158,15 @@ label.file input{display:none}
     <button type="button" id="edLocal" title="Keep it unscheduled, stored only in this browser">Save draft locally</button>
     <button type="button" class="primary" id="edDone">Done</button>
   </div>
+  </div>
+  <aside id="edQR" hidden>
+    <div class="qrbox" id="qrBox"></div>
+    <div class="muted" id="qrNote"></div>
+    <div class="muted" id="qrMedia"></div>
+    <a id="xLink" href="#">Open in X app</a>
+    <button type="button" id="qrPosted" title="Use this after you posted it from your phone">Posted it, free the slot</button>
+  </aside>
+  </div>
 </form></dialog>
 
 <dialog id="settings"><form method="dialog" class="dlg">
@@ -153,9 +177,10 @@ label.file input{display:none}
   <div class="row"><button type="button" class="danger" id="sForget">Forget token</button><span style="margin-left:auto"></span><button type="button" id="sCancel">Cancel</button><button type="button" class="primary" id="sSave">Save &amp; connect</button></div>
 </form></dialog>
 
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js"></script>
 <script>
 "use strict";
-const APP_VERSION = "2026.11.02.4";
+const APP_VERSION = "2026.11.02.5";
 const DAYS = 62, BRANCH = "master";
 const LS = {get:k=>{try{return localStorage.getItem(k)}catch(e){return null}}, set:(k,v)=>{try{localStorage.setItem(k,v)}catch(e){}}, del:k=>{try{localStorage.removeItem(k)}catch(e){}}};
 let repo = LS.get("xp.repo") || "andzol/x-wisdom-scheduler";
@@ -355,7 +380,7 @@ function openEditor(p, date, slot){
   $("edSlot").innerHTML = `<option value="">unscheduled</option>` + cfg.slots.map(s=>`<option ${s===edPost.slot?"selected":""}>${s}</option>`).join("");
   for(const id of ["edDate","edSlot","edKind","addMediaBtn","edDelete"]) $(id).disabled = !!tid;
   $("edLocal").hidden = !!tid;
-  updateCount(); renderMedia(); $("editor").showModal();
+  updateCount(); renderMedia(); drawQR(); $("editor").showModal();
   if(!tid) setTimeout(()=>$("edText").focus(), 50);
 }
 function updateCount(){
@@ -364,9 +389,9 @@ function updateCount(){
   const d=$("edDate").value, s=$("edSlot").value;
   $("edWhen").textContent = d && s ? (isPast(d,s) ? "⚠ this time has passed, it will post on the next run" : `posts in ${fmtMins(minsUntil(d,s))}`) : edIsLocal ? "stays in this browser only" : "goes to Drafts";
 }
-$("edText").oninput = updateCount; $("edDate").onchange = updateCount; $("edSlot").onchange = updateCount;
+$("edText").oninput = () => { updateCount(); queueQR(); }; $("edDate").onchange = updateCount; $("edSlot").onchange = updateCount;
 async function renderMedia(){
-  const box = $("mediaList"); box.innerHTML = "";
+  const box = $("mediaList"); box.innerHTML = ""; qrMediaNote();
   for(const [i,m] of (edPost.media||[]).entries()){
     const div = document.createElement("div"); div.className = "mi";
     div.innerHTML = `<div class="up">loading…</div>` + (posted.has(edPost.id)?"":`<button type="button" data-i="${i}">✕</button>`);
@@ -440,6 +465,49 @@ $("edLocal").onclick = () => {
   locals = [edPost, ...locals.filter(x=>x.id!==edPost.id)]; saveLocals();
   $("editor").close();
   if(wasSynced){ posts = posts.filter(x=>x.id!==edPost.id); markDirty(); } else render();
+};
+
+/* ---------- QR: post from the phone ---------- */
+// twitter://post opens the X app composer with the text (https://x.com/intent would open Safari)
+let qrTimer = null;
+const xAppLink = t => "twitter://post?message=" + encodeURIComponent(t);
+function qrSVG(data){
+  const q = qrcode(0, "L"); q.addData(data); q.make();
+  const n = q.getModuleCount(); let d = "";
+  for(let r=0;r<n;r++) for(let c=0;c<n;c++) if(q.isDark(r,c)) d += `M${c},${r}h1v1h-1z`;
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${n} ${n}" shape-rendering="crispEdges"><path d="${d}" fill="#000"/></svg>`;
+}
+function qrMediaNote(){
+  const m = edPost?.media || [], n = m.length;
+  $("qrMedia").textContent = !n ? "" : `Add the ${m[0].type==="video" ? "video" : n>1 ? n+" images" : "image"} on your phone, a QR code can only carry the text`;
+}
+function drawQR(){
+  clearTimeout(qrTimer);
+  const t = $("edText").value.replace(/\s+$/,"");
+  const show = !!t.trim() && !posted.has(edPost.id);
+  $("edQR").hidden = !show; $("editor").classList.toggle("wide", show);
+  if(!show) return;
+  const link = xAppLink(t);
+  $("xLink").href = link;
+  try{
+    if(typeof qrcode === "undefined") throw new Error("QR library didn't load");
+    $("qrBox").innerHTML = qrSVG(link);
+    $("qrNote").textContent = 'Scan with your phone camera, then tap "Open in X"';
+  }catch(e){ $("qrBox").innerHTML = ""; $("qrNote").textContent = /too long|overflow|length/i.test(e.message) ? "Too long for a QR code" : e.message; }
+  $("qrBox").classList.remove("stale");
+  qrMediaNote();
+}
+// edits redraw the QR after 10 s without typing, so the phone never scans a half-written post
+function queueQR(){
+  if($("edQR").hidden){ drawQR(); return; }
+  $("qrBox").classList.add("stale"); $("qrNote").textContent = "Updating 10 s after you stop typing…";
+  clearTimeout(qrTimer); qrTimer = setTimeout(drawQR, 10000);
+}
+$("editor").addEventListener("close", () => clearTimeout(qrTimer));
+$("qrPosted").onclick = () => {
+  if(edIsLocal){ locals = locals.filter(p=>p.id!==edPost.id); saveLocals(); $("editor").close(); render(); return; }
+  if(edIsNew){ $("editor").close(); return; }
+  posts = posts.filter(p=>p.id!==edPost.id); $("editor").close(); markDirty();
 };
 
 /* ---------- settings ---------- */

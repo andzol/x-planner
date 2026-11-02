@@ -1,0 +1,16 @@
+{
+  "manifest_version": 3,
+  "name": "X Planner: Schedule",
+  "version": "1.0.0",
+  "description": "Adds a Schedule button to the X composer that puts the post into the next free X Planner slot.",
+  "permissions": ["storage"],
+  "host_permissions": ["https://api.github.com/*"],
+  "background": { "service_worker": "background.js" },
+  "content_scripts": [{
+    "matches": ["https://x.com/*", "https://twitter.com/*"],
+    "js": ["content.js"],
+    "css": ["content.css"]
+  }],
+  "options_page": "options.html",
+  "action": { "default_title": "X Planner settings", "default_popup": "options.html" }
+}

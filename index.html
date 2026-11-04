@@ -41,7 +41,7 @@ table{border-collapse:separate;border-spacing:0;min-width:100%}
 th{position:sticky;top:0;z-index:5;background:var(--panel);color:var(--mut);font-weight:600;font-size:12px;padding:8px;border-bottom:1px solid var(--line);text-align:left}
 th.day,td.day{position:sticky;left:0;z-index:6;background:var(--panel);width:92px;min-width:92px}
 th.day{z-index:7}
-td{border-bottom:1px solid var(--line);border-right:1px solid #171a22;vertical-align:top;padding:5px;width:200px;min-width:170px;height:96px}
+td{border-bottom:1px solid var(--line);border-right:1px solid #171a22;vertical-align:top;padding:5px;width:200px;min-width:170px;height:64px}
 td.day{padding:8px;color:var(--mut);font-size:12px;border-right:1px solid var(--line)}
 td.day b{display:block;color:var(--txt);font-size:14px}
 td.day .fill{margin-top:4px;font-size:11px}
@@ -49,10 +49,10 @@ tr.today td.day{box-shadow:inset 3px 0 0 var(--blue)}
 tr.weekend td.day b{color:#b9c0cf}
 td.slot.past{background:#0d0f14}
 td.slot.over{outline:2px dashed var(--blue);outline-offset:-3px}
-.empty{height:100%;min-height:84px;border:1px dashed transparent;border-radius:8px;display:flex;align-items:center;justify-content:center;color:var(--faint);cursor:pointer;font-size:18px}
+.empty{height:100%;min-height:52px;border:1px dashed transparent;border-radius:8px;display:flex;align-items:center;justify-content:center;color:var(--faint);cursor:pointer;font-size:18px}
 td.slot:hover .empty{border-color:var(--line);color:var(--mut)}
 td.slot.past .empty{cursor:default;font-size:11px}
-.card{position:relative;background:var(--card);border:1px solid var(--line);border-left:3px solid var(--post);border-radius:8px;padding:6px 8px 6px 9px;cursor:grab;min-height:84px;display:flex;flex-direction:column;gap:4px}
+.card{position:relative;background:var(--card);border:1px solid var(--line);border-left:3px solid var(--post);border-radius:8px;padding:6px 8px 6px 9px;cursor:grab;display:flex;flex-direction:column;gap:4px}
 .card.quote{border-left-color:var(--quote)} .card.question{border-left-color:var(--question)}
 .card .t{font-size:12.5px;line-height:1.35;display:-webkit-box;-webkit-line-clamp:4;-webkit-box-orient:vertical;overflow:hidden;white-space:pre-line;word-break:break-word}
 .card .m{display:flex;gap:6px;align-items:center;margin-top:auto;font-size:11px;color:var(--mut)}
@@ -199,7 +199,7 @@ dialog#editor:not(.wide) .edqrbtn{display:none}
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js"></script>
 <script>
 "use strict";
-const APP_VERSION = "2026.11.04.1";
+const APP_VERSION = "2026.11.04.2";
 const DAYS = 62, BRANCH = "master";
 const LS = {get:k=>{try{return localStorage.getItem(k)}catch(e){return null}}, set:(k,v)=>{try{localStorage.setItem(k,v)}catch(e){}}, del:k=>{try{localStorage.removeItem(k)}catch(e){}}};
 let repo = LS.get("xp.repo") || "andzol/x-wisdom-scheduler";

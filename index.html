@@ -34,6 +34,8 @@ main{flex:1;min-height:0;display:flex;align-items:stretch}
 #drafts{min-height:120px;display:flex;flex-direction:column;gap:8px;border-radius:10px;padding:2px}
 #drafts.over{outline:2px dashed var(--blue)}
 .hint{color:var(--faint);font-size:12px;margin-top:10px}
+.legend{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:10px;font-size:12px;color:var(--mut)}
+.legend i{display:inline-block;width:3px;height:12px;border-radius:2px;margin-right:5px;vertical-align:-1px}
 #gridwrap{flex:1;min-width:0;overflow:auto}
 table{border-collapse:separate;border-spacing:0;min-width:100%}
 th{position:sticky;top:0;z-index:5;background:var(--panel);color:var(--mut);font-weight:600;font-size:12px;padding:8px;border-bottom:1px solid var(--line);text-align:left}
@@ -52,13 +54,10 @@ td.slot:hover .empty{border-color:var(--line);color:var(--mut)}
 td.slot.past .empty{cursor:default;font-size:11px}
 .card{position:relative;background:var(--card);border:1px solid var(--line);border-left:3px solid var(--post);border-radius:8px;padding:6px 8px 6px 9px;cursor:grab;min-height:84px;display:flex;flex-direction:column;gap:4px}
 .card.quote{border-left-color:var(--quote)} .card.question{border-left-color:var(--question)}
-.card .t{font-size:12.5px;line-height:1.35;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden;white-space:pre-line;word-break:break-word}
+.card .t{font-size:12.5px;line-height:1.35;display:-webkit-box;-webkit-line-clamp:4;-webkit-box-orient:vertical;overflow:hidden;white-space:pre-line;word-break:break-word}
 .card .m{display:flex;gap:6px;align-items:center;margin-top:auto;font-size:11px;color:var(--mut)}
-.card .m .k{text-transform:uppercase;letter-spacing:.5px;font-weight:700}
-.card.quote .k{color:var(--quote)} .card.question .k{color:var(--question)} .card.post .k{color:var(--post)}
 .card .thumb{width:100%;height:54px;object-fit:cover;border-radius:5px;background:#000}
 .card.posted{opacity:.6;cursor:default;border-left-color:var(--green)}
-.card.posted .k{color:var(--green)!important}
 .card.missed{border-color:#5a3d10}
 .card.dragging{opacity:.35}
 .card.local{border-style:dashed;border-left-style:solid}
@@ -145,6 +144,7 @@ dialog#editor:not(.wide) .edqrbtn{display:none}
 <main>
   <aside id="tray">
     <h2>Drafts <span id="draftCount"></span></h2>
+    <div class="legend"><span><i style="background:var(--post)"></i>Post</span><span><i style="background:var(--quote)"></i>Quote</span><span><i style="background:var(--question)"></i>Question</span><span><i style="background:var(--green)"></i>Posted</span></div>
     <div id="drafts"></div>
     <div class="hint">Drag a card into a slot to schedule it. Drag it back here to unschedule. Dropping on a filled slot swaps the two posts. Cards marked <b>local</b> live only in this browser and never post until you drag them into a slot.</div>
   </aside>
@@ -199,7 +199,7 @@ dialog#editor:not(.wide) .edqrbtn{display:none}
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js"></script>
 <script>
 "use strict";
-const APP_VERSION = "2026.11.02.13";
+const APP_VERSION = "2026.11.04.1";
 const DAYS = 62, BRANCH = "master";
 const LS = {get:k=>{try{return localStorage.getItem(k)}catch(e){return null}}, set:(k,v)=>{try{localStorage.setItem(k,v)}catch(e){}}, del:k=>{try{localStorage.removeItem(k)}catch(e){}}};
 let repo = LS.get("xp.repo") || "andzol/x-wisdom-scheduler";
@@ -342,10 +342,12 @@ function cardHTML(p){
   const loc = isLocal(p.id), late = past && !tid ? -minsUntil(p.date,p.slot) : 0;
   const cls = ["card", kind, tid?"posted":"", !tid&&past?"missed":"", loc?"local":""].join(" ");
   const badge = tid ? `<span class="badge ok">✓ posted</span>` : past ? `<span class="badge warn">${late>40?"⚠ not posted yet":"posting…"}</span>` : loc ? `<span class="badge loc">local</span>` : "";
+  // the left border color shows the kind, so the card only names what the color can't
+  const meta = `${vid?"<span>🎬 video</span>":""}${(p.media||[]).filter(m=>m.type==="image").length>1?`<span>🖼 ${(p.media||[]).length}</span>`:""}${badge}`;
   return `<div class="${cls}" draggable="${tid?"false":"true"}" data-id="${esc(p.id)}">
     ${img?`<img class="thumb" data-path="${esc(img.path)}" alt="">`:""}
     <div class="t">${esc((p.text||"(no text)").replace(/\n{2,}/g,"\n"))}</div>
-    <div class="m"><span class="k">${tid?"posted":kind}</span>${vid?"<span>🎬 video</span>":""}${(p.media||[]).filter(m=>m.type==="image").length>1?`<span>🖼 ${(p.media||[]).length}</span>`:""}${badge}</div></div>`;
+    ${meta?`<div class="m">${meta}</div>`:""}</div>`;
 }
 let thumbObserver = null;
 function hydrateThumbs(){
